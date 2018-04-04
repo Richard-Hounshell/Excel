@@ -1,0 +1,41 @@
+Public Function RangeToHTML(rng As Range)
+On Error GoTo Err_RangeToHTML  ' Enable error-handling routine.
+
+    Dim fso As Object, ts As Object, TempFile As String
+
+    TempFile = Environ$("temp") & "/" & Format(Now, "dd-mm-yy h-mm-ss") & ".htm"
+    
+    Application.DisplayAlerts = False
+    
+    ' Publish the sheet of the range to an .htm file.
+    With rng.Worksheet.Parent.PublishObjects.Add( _
+         SourceType:=xlSourceRange, _
+         Filename:=TempFile, _
+         Sheet:=rng.Worksheet.Name, _
+         Source:=rng.Address, _
+         HtmlType:=xlHtmlStatic)
+        .Publish (True)
+    End With
+ 
+    ' Read all data from the .htm file into the RangetoHTML subroutine.
+    Set fso = CreateObject("Scripting.FileSystemObject")
+    Set ts = fso.GetFile(TempFile).OpenAsTextStream(1, -2)
+    RangeToHTML = ts.ReadAll
+    ts.Close
+
+    RangeToHTML = Replace(RangeToHTML, "align=center", _
+                          "align=left")
+    Application.DisplayAlerts = True
+Exit_RangeToHTML:
+    ' Delete the htm file.
+    Kill TempFile
+    Set ts = Nothing
+    Set fso = Nothing
+    Exit Function
+Err_RangeToHTML:
+    Select Case Err.Number
+        Case Else
+            MsgBox "An error occured; report:" & Chr(10) & Err.Description & Chr(10) & Err.Number
+            Resume Exit_RangeToHTML
+    End Select
+End Function
