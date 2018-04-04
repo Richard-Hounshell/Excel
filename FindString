@@ -1,0 +1,26 @@
+Public Function FindString(ByVal strSrch As String, _
+                    Optional ws As Worksheet, _
+                    Optional LookAt As XlLookAt = xlPart, _
+                    Optional LookIn As XlFindLookIn = xlValues, _
+                    Optional MatchCase As Boolean = False) As Range
+On Error GoTo Err_FindString  ' Enable error-handling routine.
+
+    If ws Is Nothing Then Set ws = Application.ActiveSheet
+    
+    Dim rngLookin As Range: Set rngLookin = ws.UsedRange
+    
+    Set FindString = rngLookin.Find(What:=strSrch, _
+                                    LookIn:=LookIn, _
+                                    LookAt:=LookAt, _
+                                    MatchCase:=MatchCase)
+Exit_FindString:
+    Set rngLookin = Nothing
+    Exit Function
+Err_FindString:
+    Select Case Err.Number
+        Case Else
+            MsgBox "An error occured; report:" & Chr(10) & Err.Description & Chr(10) & Err.Number
+            Resume Exit_FindString
+    End Select
+
+End Function
