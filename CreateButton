@@ -1,0 +1,37 @@
+Function CreateButton(btnCpt As String, _
+                    btnSub As String, _
+                    btnNm As String, _
+                    Optional ws As Worksheet, _
+                    Optional rng As Range) As Boolean
+On Error GoTo Err_CreateButton  ' Enable error-handling routine.
+    Dim btn As Button
+    
+    Application.ScreenUpdating = False
+    
+    If ws Is Nothing Then Set ws = ActiveSheet
+    
+    If rng Is Nothing Then Set rng = ws.Range(ws.Cells(1, 1), ws.Cells(1, 1))
+    
+    With rng
+        On Error Resume Next
+        Set btn = ws.Buttons.Add(.Left, .Top, .Width, .Height)
+    End With
+    
+    With btn
+      .OnAction = btnSub
+      .Caption = btnCpt
+      .Name = btnNm
+    End With
+
+    Application.ScreenUpdating = True
+Success_CreateButton:
+    CreateButton = True
+Exit_CreateButton:
+    Exit Function
+Err_CreateButton:
+    Select Case Err.Number
+        Case Else
+            MsgBox "An error occured; report:" & Chr(10) & Err.Description & Chr(10) & Err.Number
+            Resume Exit_CreateButton
+    End Select
+End Function
