@@ -1,0 +1,18 @@
+Option Explicit
+Public WithEvents MonitorApp As Application
+
+Private Sub Workbook_Open()
+    Set MonitorApp = Application
+End Sub
+
+Private Sub MonitorApp_WorkbookOpen(ByVal wb As Workbook)
+    OpenFunctions wb
+End Sub
+
+Private Sub MonitorApp_WorkbookActivate(ByVal wb As Workbook)
+    If wb.Name <> Application.ThisWorkbook.Name Then ActivateFunctions wb
+End Sub
+
+Private Sub MonitorApp_WorkbookBeforeClose(ByVal wb As Workbook, Cancel As Boolean)
+    CloseFunctions wb
+End Sub
