@@ -1,0 +1,14 @@
+Function FileNmNoExt(nm As String) As String
+On Error GoTo Err_FileNmNoExt
+
+    fNmNoExt = Left(nm, (InStrRev(nm, ".", -1, vbTextCompare) - 1))
+    
+Exit_FileNmNoExt:
+    Exit Function
+Err_FileNmNoExt:
+    Select Case Err.Number
+        Case Else
+            MsgBox "An error occured; report:" & Chr(10) & Err.Description & Chr(10) & Err.Number
+            Resume Exit_FileNmNoExt
+    End Select
+End Function
