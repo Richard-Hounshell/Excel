@@ -1,0 +1,69 @@
+'Enum for fLast function
+Public Enum vbLast
+    LastRow = 1
+    LastColumn = 2
+    LastCell = 3
+End Enum
+
+Function fLast(choice As vbLast, rng As Range)
+'Ron de Bruin, 5 May 2008
+
+    Dim lrw As Long
+    Dim lcol As Long
+
+    Select Case choice
+
+    Case 1:
+        On Error Resume Next
+        fLast = rng.Find(What:="*", _
+                        After:=rng.Cells(1), _
+                        LookAt:=xlPart, _
+                        LookIn:=xlFormulas, _
+                        SearchOrder:=xlByRows, _
+                        SearchDirection:=xlPrevious, _
+                        MatchCase:=False).Row
+        On Error GoTo 0
+
+    Case 2:
+        On Error Resume Next
+        fLast = rng.Find(What:="*", _
+                        After:=rng.Cells(1), _
+                        LookAt:=xlPart, _
+                        LookIn:=xlFormulas, _
+                        SearchOrder:=xlByColumns, _
+                        SearchDirection:=xlPrevious, _
+                        MatchCase:=False).Column
+        On Error GoTo 0
+
+    Case 3:
+        On Error Resume Next
+        lrw = rng.Find(What:="*", _
+                       After:=rng.Cells(1), _
+                       LookAt:=xlPart, _
+                       LookIn:=xlFormulas, _
+                       SearchOrder:=xlByRows, _
+                       SearchDirection:=xlPrevious, _
+                       MatchCase:=False).Row
+        On Error GoTo 0
+
+        On Error Resume Next
+        lcol = rng.Find(What:="*", _
+                        After:=rng.Cells(1), _
+                        LookAt:=xlPart, _
+                        LookIn:=xlFormulas, _
+                        SearchOrder:=xlByColumns, _
+                        SearchDirection:=xlPrevious, _
+                        MatchCase:=False).Column
+        On Error GoTo 0
+
+        On Error Resume Next
+        Set fLast = rng.Parent.Cells(lrw, lcol) '.Address(False, False)
+        If Err.Number > 0 Then
+            'if nothing is found Last returns as nothing
+            'fLast = rng.Cells(1).Address(False, False)
+            Err.Clear
+        End If
+        On Error GoTo 0
+
+    End Select
+End Function
