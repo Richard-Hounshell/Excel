@@ -1,0 +1,14 @@
+Function fUserDetails() As Object
+On Error GoTo Err_fUserDetails ' Enable error-handling routine.
+
+    Set fUserDetails = CreateObject("WScript.Network")
+
+Exit_fUserDetails:
+    Exit Function
+Err_fUserDetails:
+    Select Case Err.Number
+        Case Else
+            MsgBox "An error occured; report:" & Chr(10) & Err.Description & Chr(10) & Err.Number
+            Resume Exit_fUserDetails
+    End Select
+End Function
