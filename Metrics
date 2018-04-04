@@ -1,0 +1,372 @@
+Private Const AutoRun = False
+Private Const MacroName = "Metrics_Formating"
+Private Const CompatiableVersion = 0.5
+
+Private Enum VersionComparison
+    GreaterThan = -1
+    NotApplicable = 0
+    LesserThan = 1
+End Enum
+
+Public OpenedWBNM As String
+
+Option Explicit
+
+Public Sub CreateMetricsReport()
+On Error GoTo Err_CreateMetricsReport  ' Enable error-handling routine.
+    'Create a Report object and initialize the report formating with it
+    Dim rprt As New Report: rprt.Init Application.ActiveSheet
+     
+Exit_CreateMetricsReport:
+    Exit Sub
+Err_CreateMetricsReport:
+    Select Case Err.Number
+        Case 1004
+            Resume Exit_CreateMetricsReport
+        Case Else
+            MsgBox "An error occured; report:" & Chr(10) & Err.Description & Chr(10) & Err.Number
+            Resume Exit_CreateMetricsReport
+    End Select
+End Sub
+
+Public Sub FormatMetrics(rprt As Report)
+On Error GoTo Err_FormatMetrics  ' Enable error-handling routine.
+    'Initialize the formating of the passed Report object
+    rprt.Init
+    
+Exit_FormatMetrics:
+    Exit Sub
+    
+Err_FormatMetrics:
+    Select Case Err.Number
+        Case 1004
+            Resume Exit_FormatMetrics:
+        Case Else
+            MsgBox "An error occured; report:" & Chr(10) & Err.Description & Chr(10) & Err.Number
+            Resume Exit_FormatMetrics
+    End Select
+End Sub
+
+Public Sub OpenFunctions(wb As Workbook)
+On Error GoTo Err_OpenFunctions
+    'Store the name of the open workbook
+    OpenedWBNM = wb.Name
+    'Check if the opened workbook is this workbook and if so...
+    If wb.Name = Application.ThisWorkbook.Name Then
+       'Kill any old versions of the macro
+       PruneOldVs
+    End If
+Exit_OpenFunctions:
+    'Clear variable
+    OpenedWBNM = ""
+    Exit Sub
+Err_OpenFunctions:
+    Resume Exit_OpenFunctions
+End Sub
+
+Public Sub ActivateFunctions(wb As Workbook)
+On Error GoTo Err_ActivateFunctions  ' Enable error-handling routine.
+    'Check if the activated workbook is a valid report to be formatted
+    Dim rprt As New Report, ws As Worksheet: Set ws = rprt.ValidReport(wb.ActiveSheet)
+    'Check that a valid report was returned
+    If Not ws Is Nothing Then
+        If AutoRun Then
+            'Start formating now and pass the valid report we already found...
+            FormatMetrics rprt
+            'Close excel afterward
+            CloseExcel wb
+        Else
+            'Ask the user if they want to format the report...
+            Dim msg As String: msg = "Compatiable Metrics Report detected, would you like to format this now?"
+            If MsgBox(msg, vbYesNo, "Report Formatting") = vbYes Then
+                'Format the report and pass the valid report we already found...
+                FormatMetrics rprt
+            End If
+        End If
+    End If
+    
+Exit_ActivateFunctions:
+    Exit Sub
+Err_ActivateFunctions:
+    Select Case Err.Number
+        Case Else
+            MsgBox "An error occured; report:" & Chr(10) & Err.Description & Chr(10) & Err.Number
+            Resume Exit_ActivateFunctions
+    End Select
+End Sub
+
+Sub CloseFunctions(wb As Workbook)
+On Error GoTo Err_CloseFunctions  ' Enable error-handling routine.
+
+    Call CloseExcel(wb, False)
+
+Exit_CloseFunctions:
+    Exit Sub
+Err_CloseFunctions:
+    Select Case Err.Number
+        Case Else
+            MsgBox "An error occured; report:" & Chr(10) & Err.Description & Chr(10) & Err.Number
+            Resume Exit_CloseFunctions
+    End Select
+End Sub
+
+Private Sub PruneOldVs()
+On Error GoTo Err_PruneOldVs  ' Enable error-handling routine.
+    Dim wb As Workbook
+    Dim delName As String
+    'Iterate through each open workbook and...
+    For Each wb In Application.Workbooks
+        'Check if it's in the XLSTART folder and is a previous version of this macro and...
+        If wb.Path = Application.StartupPath And _
+            fNoVNum(wb.Name) = fNoVNum(Application.ThisWorkbook.Name) And _
+                fCompareVersions(wb) = LesserThan Then
+            'Add thisworkbook to XLSTART if not already
+            AddToXLSTART Application.ThisWorkbook
+            'Check if a compatiable version is listed and if so import it's settings
+            If fVNum(wb.Name) >= CompatiableVersion Then ImportSettings wb
+            delName = wb.FullName
+            'Close the old macro
+            wb.Close False
+            'Delete the old macro
+            DeleteFile delName
+            'Dump objects
+            Set wb = Nothing
+        End If
+    Next
+
+Exit_PruneOldVs:
+    Exit Sub
+Err_PruneOldVs:
+    Select Case Err.Number
+        Case Else
+            MsgBox "An error occured; report:" & Chr(10) & Err.Description & Chr(10) & Err.Number
+            Resume Exit_PruneOldVs
+    End Select
+End Sub
+
+Private Sub AddToXLSTART(wb As Workbook)
+On Error GoTo Err_AddToXLSTART  ' Enable error-handling routine.
+    'Save this workbook to the XLstart folder if it's not already there
+    If wb.Path <> Application.StartupPath And wb.Name = Application.ThisWorkbook.Name Then
+        Call SaveWB(wb, Application.StartupPath)
+    End If
+    
+Exit_AddToXLSTART:
+    Exit Sub
+Err_AddToXLSTART:
+    Select Case Err.Number
+        Case Is = 1004
+            Resume Exit_AddToXLSTART
+        Case Else
+            MsgBox "An error occured; report:" & Chr(10) & Err.Description & Chr(10) & Err.Number
+            Resume Exit_AddToXLSTART
+    End Select
+End Sub
+
+Private Function fNoVNum(nm As String) As String
+On Error GoTo Err_fNoVNum  ' Enable error-handling routine.
+    'Extract the name of the workbook without a version number if any
+    fNoVNum = fNmNoExt(nm)
+    fNoVNum = Left(fNoVNum, (InStrRev(fNoVNum, ".", -1, vbTextCompare) - 1))
+    fNoVNum = Left(fNoVNum, (InStrRev(fNoVNum, ".", -1, vbTextCompare) - 1))
+
+Exit_fNoVNum:
+    Exit Function
+Err_fNoVNum:
+    Select Case Err.Number
+        Case Is = 5
+            fNoVNum = nm
+            Resume Exit_fNoVNum
+        Case Else
+            MsgBox "An error occured; report:" & Chr(10) & Err.Description & Chr(10) & Err.Number
+            Resume Exit_fNoVNum
+    End Select
+End Function
+
+Private Function fVNum(nm As String) As Single
+On Error GoTo Err_fVNum  ' Enable error-handling routine.
+    'Extract just the version number
+    Dim posStart As Integer
+    Dim posStop As Integer
+    Dim vLen As Integer
+Define_Vars:
+    posStart = InStr(nm, ".v") + 2
+    If InStr(1, nm, " (") > 0 Then
+         posStop = InStr(posStart, nm, " (")
+    Else
+        posStop = InStr(posStart, nm, ".x")
+    End If
+    vLen = posStop - posStart
+Main_fVNum:
+    fVNum = CSng(Mid(nm, posStart, vLen))
+Exit_fVNum:
+    Exit Function
+Err_fVNum:
+    Select Case Err.Number
+        Case Is = 5
+            fVNum = 0
+            Resume Exit_fVNum
+        Case Is = 13
+            'Need to handle a name variation that probably means it has a windows generated file version appended
+            If InStr(1, nm, " (") > 0 Then
+                'Windows file version present, so purge it...
+                nm = PurgeWinVNum(nm)
+                Resume Define_Vars
+                'Resume Exit_fVNum
+            Else
+                'Some other name variation, this is weird...
+                Debug.Print "Extreme file name variation found by fVNum."
+                Resume Exit_fVNum
+            End If
+        Case Else
+            MsgBox "An error occured; report:" & Chr(10) & Err.Description & Chr(10) & Err.Number
+            Resume Exit_fVNum
+    End Select
+End Function
+
+Private Function fCompareVersions(wb As Workbook) As VersionComparison
+On Error GoTo Err_fCompareVersions  ' Enable error-handling routine.
+    'Check that the passed workbook has the correct name...
+    If fNoVNum(wb.Name) = MacroName Then
+        'If so, extract the versions numbers from this workbook and the passed one
+        Dim vNum1 As Single: vNum1 = fVNum(wb.Name)
+        Dim vNum2 As Single: vNum2 = fVNum(Application.ThisWorkbook.Name)
+        'Check if the version number extraction returned 0 and...
+        If vNum1 = 0 Or vNum2 = 0 Then
+            'If so we're not going to mess with it
+            fCompareVersions = NotApplicable
+        Else
+            'Check the difference between the versions numbers and return that
+            If vNum1 > vNum2 Then
+                fCompareVersions = GreaterThan
+            ElseIf vNum1 < vNum2 Then
+                fCompareVersions = LesserThan
+            Else
+                fCompareVersions = NotApplicable
+            End If
+        End If
+    Else 'If not this macro doesn't care
+        fCompareVersions = NotApplicable
+    End If
+    
+Exit_fCompareVersions:
+    Exit Function
+Err_fCompareVersions:
+    Select Case Err.Number
+        Case Is = 1004
+            Resume Exit_fCompareVersions
+        Case Else
+            MsgBox "An error occured; report:" & Chr(10) & Err.Description & Chr(10) & Err.Number
+            Resume Exit_fCompareVersions
+    End Select
+End Function
+
+Private Sub CloseExcel(Optional wb As Workbook, Optional closeWB As Boolean = True)
+On Error GoTo Err_CloseExcel  ' Enable error-handling routine.
+    Dim i As Integer
+    Dim closingNM As String
+    'Check to see if a workbook was passed and..
+    If Not wb Is Nothing Then
+        'Define the closing workbook name for reference as variable wb will be repurposed
+        closingNM = wb.Name
+        'Determine if ThisWorkbook as a file version appended and if so purge that
+        If InStr(1, Application.ThisWorkbook.Name, " (") > 0 And _
+        wb.Name = Application.ThisWorkbook.Name Then PurgeWinVNum Application.ThisWorkbook.Name
+        'Close the passed workbook, unless closeWB is false
+        If closeWB Then wb.Close False
+        'Set wb = Nothing
+    End If
+    'Check if this is being called because this workbook is being closed and if not...
+    If closingNM <> Application.ThisWorkbook.Name Then
+    'Iterate through each workbook...
+        For Each wb In Application.Workbooks
+            'And keep track if there are workbooks open besides this one and the closing one
+            If wb.Name <> Application.ThisWorkbook.Name And _
+                wb.Name <> closingNM Then i = i + 1
+        Next wb
+        'If the only workbooks open are the closing one and this one, close app
+        If i = 0 Then Application.Quit
+    End If
+Exit_CloseExcel:
+    Exit Sub
+Err_CloseExcel:
+    Select Case Err.Number
+        Case Else
+            MsgBox "An error occured; report:" & Chr(10) & Err.Description & Chr(10) & Err.Number
+            Resume Exit_CloseExcel
+    End Select
+End Sub
+
+Private Sub ImportSettings(wbOld As Workbook)
+On Error GoTo Err_ImportSettings  ' Enable error-handling routine.
+'Import settings from old macro to the new one
+    Dim wbNew As Workbook: Set wbNew = Application.ThisWorkbook
+    Dim wsOld As Worksheet, wsNew As Worksheet
+    Dim rngNew As Range, rngOld As Range
+    
+    Application.DisplayAlerts = False
+    Application.ScreenUpdating = False
+    'Iterate through each sheet in the old macro
+    For Each wsOld In wbOld.Sheets
+        'Check if the name equals one of these two and..
+        If wsOld.Name = "Metrics Email Distro" Or wsOld.Name = "Metrics Goals" Then
+            Set wsNew = wbNew.Worksheets(wsOld.Name)
+            wsNew.Unprotect
+            'Iterate through each row after the first and...
+            For Each rngOld In wsOld.Range(wsOld.Cells(2, 1), fLast(LastCell, wsOld.UsedRange)).Rows
+                With rngOld
+                    'Check if the original range has a merge and..
+                    If IsNull(.MergeCells) = True Or .MergeCells = True Then
+                        'If so, just set the values of the old fields to
+                        wsNew.Range(.Address) = .Value
+                    Else
+                        'Otherwise copy the original range
+                        .Copy
+                        'And paste itnto the new settings sheet
+                        wsNew.Range(.Address).PasteSpecial
+                    End If
+                End With
+            Next
+            'If there are more Distros or goals in the new one than the old one, delete those
+            If fLast(LastRow, wsOld.UsedRange) < fLast(LastRow, wsNew.UsedRange) Then
+                For Each rngNew In wsNew.Range(wsNew.Cells((fLast(LastRow, wsOld.UsedRange) + 1), 1), _
+                                                fLast(LastCell, wsNew.UsedRange)).Rows
+                    rngNew.Clear
+                Next
+            End If
+            wsNew.Protect
+        End If
+    Next
+    'Save the changes to the new Macro workbook
+    Call SaveWB(wbNew, wbNew.Path)
+    
+    Application.ScreenUpdating = True
+    Application.DisplayAlerts = True
+    
+Exit_ImportSettings:
+    Exit Sub
+Err_ImportSettings:
+    Select Case Err.Number
+        Case Else
+            MsgBox "An error occured; report:" & Chr(10) & Err.Description & Chr(10) & Err.Number
+            Resume Exit_ImportSettings
+    End Select
+End Sub
+
+Private Function PurgeWinVNum(nm As String)
+On Error GoTo Err_PurgeWinVNum
+    Dim newNM As String
+    'Create new file name exlcuding the windows file version "(N)"
+    newNM = Left(nm, InStr(1, nm, " (") - 1) & "." & FindExt(nm)
+    'Save the workbook given as the new file name
+    On Error Resume Next
+    Application.Workbooks(nm).SaveAs Application.StartupPath & "\" & newNM
+    'Kill the old file
+    Kill Application.StartupPath & "\" & nm
+    'Return the new filename
+    PurgeWinVNum = newNM
+Exit_PurgeWinVNum:
+    Exit Function
+Err_PurgeWinVNum:
+    Resume Next
+End Function
