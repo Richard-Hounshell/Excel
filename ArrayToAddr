@@ -1,0 +1,22 @@
+Function ArrayToAddr(varArray As Variant) As String
+On Error GoTo Err_ArrayToAddr ' Enable error-handling routine.
+    
+    Dim str As String
+    
+    If Not IsArray(varArray) Then varArray = Split(varArray, ",", 2)
+    
+    ArrayToAddr = ArrayToAddr & "$" & ColNumToLttr(varArray(1))
+    ArrayToAddr = ArrayToAddr & "$" & varArray(0)
+
+Exit_ArrayToAddr:
+    Exit Function
+Err_ArrayToAddr:
+    Select Case Err.Number
+        Case Is = 9 Or 1004 '0 dimensional array created or completely invalid details were given
+            ArrayToAddr = ""
+            Resume Exit_ArrayToAddr
+        Case Else
+            MsgBox "An error occured; report:" & Chr(10) & Err.Description & Chr(10) & Err.Number
+            Resume Exit_ArrayToAddr
+    End Select
+End Function
