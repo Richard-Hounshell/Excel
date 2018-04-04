@@ -1,0 +1,9 @@
+Function ColNumToLttr(ByVal ColumnNumber As Long) As String
+On Error Resume Next
+    ColNumToLttr = Split(Application.ActiveSheet.Cells(1, ColumnNumber).Address, "$")(1)
+End Function
+
+Function ColLttrToNum(ByVal ColumnLetter As String) As Long
+On Error Resume Next
+    ColLttrToNum = Application.ActiveSheet.Range(ColumnLetter & 1).Column
+End Function
