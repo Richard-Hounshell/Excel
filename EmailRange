@@ -1,0 +1,55 @@
+Public Function EmailRange(strSubject As String, _
+                            strHTML As String, _
+                            Optional ra As Range, _
+                            Optional strTO As String, _
+                            Optional strCC As String, _
+                            Optional strBCC As String, _
+                            Optional bolDisplay As Boolean = True) As Boolean
+On Error GoTo Err_EmailRange  ' Enable error-handling routine.
+
+    Dim OutApp As Object
+    Dim OutMail As Object
+
+    With Application
+        .ScreenUpdating = False
+        .EnableEvents = False
+    End With
+   
+    Set OutApp = CreateObject("Outlook.Application")
+    Set OutMail = OutApp.CreateItem(0)
+            
+    With OutMail
+        .To = strTO
+        .CC = strCC
+        .BCC = strBCC
+        .Subject = strSubject
+        If Not ra Is Nothing Then strHTML = strHTML & RangeToHTML(ra)
+        .HTMLBody = strHTML
+            
+        If bolDisplay = False Then
+            If Not .To = "" Then .Send
+        Else
+            .Display
+        End If
+        
+    End With
+Success_EmailRange:
+    EmailRange = True
+Exit_EmailRange:
+    With Application
+        .ScreenUpdating = True
+        .EnableEvents = True
+    End With
+    'Dump objects
+    Set OutMail = Nothing
+    Set OutApp = Nothing
+    Exit Function
+    
+Err_EmailRange:
+    Select Case Err.Number
+        Case Else
+            MsgBox "An error occured; report:" & Chr(10) & Err.Description & Chr(10) & Err.Number
+            Resume Exit_EmailRange
+    End Select
+    
+End Function
