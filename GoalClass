@@ -1,0 +1,277 @@
+'Class Goal
+'This class is used to store informaiton regarding a Metric Goal, best used in a collection
+Option Explicit
+Private varGoalValue As Variant
+Private varTolerance As Variant
+Private strGoalName As String
+Private strGoalDesc As String
+Private strGoalType As String
+Private strGoalOpp As String
+Private strGoalHTML As String
+Private rngMetric As Range
+Private cllFormats As New Collection
+
+Public Property Get Value() As Variant
+    Value = varGoalValue
+End Property
+
+Public Property Let Value(dValue As Variant)
+    varGoalValue = dValue
+End Property
+
+Public Property Get Tolerance() As Variant
+    Tolerance = varTolerance
+End Property
+
+Public Property Let Tolerance(dValue As Variant)
+    varTolerance = dValue
+End Property
+
+Public Property Get Name() As String
+    Name = strGoalName
+End Property
+
+Public Property Let Name(dValue As String)
+    strGoalName = dValue
+End Property
+
+Public Property Get Description() As String
+    Description = strGoalDesc
+End Property
+
+Public Property Let Description(dValue As String)
+    strGoalDesc = dValue
+End Property
+
+Public Property Get MetricType() As String
+    MetricType = strGoalType
+End Property
+
+Public Property Let MetricType(dValue As String)
+    strGoalType = dValue
+End Property
+
+Public Property Get Operator() As String
+    Operator = strGoalOpp
+End Property
+
+Public Property Let Operator(dValue As String)
+    strGoalOpp = dValue
+End Property
+
+Public Property Get MetricRange() As Range
+    Set MetricRange = rngMetric
+End Property
+
+Public Property Let MetricRange(rng As Range)
+    Set rngMetric = rng
+End Property
+
+Public Property Get Formating() As Collection
+    Set Formating = cllFormats
+End Property
+
+Public Property Let Formating(coll As Collection)
+    Set cllFormats = coll
+End Property
+
+Public Property Get HTML() As String
+    HTML = strGoalHTML
+End Property
+
+Public Property Let HTML(dValue As String)
+    strGoalHTML = dValue
+End Property
+
+Private Sub Class_Terminate()
+    Set rngMetric = Nothing
+    Set cllFormats = Nothing
+End Sub
+
+Public Function Init(rngMacro As Range, rngRprt As Range, lngGoalColumn As Long) As Boolean
+On Error GoTo Err_Init  ' Enable error-handling routine.
+'Set the values of the Object's variables
+    Dim Continue As Boolean
+    With rngMacro
+        Me.Name = .Value
+        Me.Description = .Offset(0, 1)
+        Me.MetricType = .Offset(0, 2)
+        Me.Operator = .Offset(0, 3)
+        Me.Tolerance = .Offset(0, 4)
+        Me.Value = .Worksheet.Cells(rngMacro.Row, lngGoalColumn)
+    End With
+    Me.MetricRange = rngRprt
+    Continue = SetHTML
+    If Continue Then
+        Continue = SetFormats
+    End If
+    
+    Init = Continue
+Exit_Init:
+    Exit Function
+Err_Init:
+    Resume Exit_Init
+End Function
+
+Private Function SetHTML() As Boolean
+On Error GoTo Err_SetHTML  ' Enable error-handling routine.
+    Dim tmpGoalHTML As String
+    Dim tmpGoalOpp As String: tmpGoalOpp = strGoalOpp
+    Dim tmpGoalType As String: tmpGoalType = strGoalType
+    'Check that Goal Value is not nothing or "*"...
+    If Me.Value <> "" And Me.Value <> "*" Then
+        'Add some begining HTML to the property
+        Me.HTML = NewLineHTML & FontHTML _
+                    & "><strong>" & Me.Name & " (" & Me.Description & ").</strong></span>" _
+                    & Chr(10) & NewLineHTML
+        'Set goal explaination...
+        If InStr(1, tmpGoalOpp, "<") > 0 Then
+            'If Goal.Operator includes a "<" symbol start the explaination with...
+            tmpGoalHTML = "Less than "
+        ElseIf InStr(1, tmpGoalOpp, ">") > 0 Then
+            'If Goal.Operator includes a ">" symbol start the explaination with...
+            tmpGoalHTML = "Greater than "
+        End If
+        'If Goal.Operator includes a "=" symbol...
+        If InStr(1, tmpGoalOpp, "=") > 0 Then
+            'And there were no other operators...
+            If tmpGoalHTML = "" Then
+                'start the explaination with...
+                tmpGoalHTML = "Equal to "
+            Else 'Otherwise...
+                'Appened to the explaination...
+                tmpGoalHTML = tmpGoalHTML & "or equal to "
+            End If
+        End If
+        'if metric type is not a percent, add a space for cleanliness
+        If Left(tmpGoalType, 1) <> "%" Then tmpGoalType = " " & tmpGoalType
+        'Create the HTML and add the construct description and add the goal and it's type
+        tmpGoalHTML = tmpGoalHTML & "<strong>" & CStr(Me.Value) & "</strong>" & Replace(tmpGoalType, ".", "")
+        'Finish the property with more HTML
+        Me.HTML = Me.HTML & FontHTML & "><em> " & tmpGoalHTML & "</em></span>" & Chr(10)
+    End If
+Success_SetHTML:
+    SetHTML = True
+Exit_SetHTML:
+    Exit Function
+Err_SetHTML:
+    Resume Exit_SetHTML
+End Function
+                
+Private Function SetFormats() As Boolean
+On Error GoTo Err_SetFormats  ' Enable error-handling routine.
+'Add details of conditional formating as a Format object to the Me.Formating collection
+    Dim TmpTol As Single
+    Dim tmpFormat As New Format
+    'Check that the metric has a defined goal...
+    If Me.Value <> "" And Me.Value <> "*" Then
+        'And check if the metric type is known to be a decimal fraction, indicated by a decimal point in the
+        If InStr(1, Me.MetricType, ".") > 0 Then
+            'Change goal value to decimal fraction
+            Me.Value = Me.Value / 100
+        End If
+        'Based on the operator given, create, define, and add Format objects to the Formating collection
+        Select Case Me.Operator
+            Case "<="
+                'Using Me.Tolerance set the tolerated difference between the goal and given metric
+                TmpTol = 1 + (Me.Tolerance / 100)
+                tmpFormat.Init xlGreater, Me.Value * TmpTol, "", RedFont, RedInterior
+                Me.Formating.Add tmpFormat
+                Set tmpFormat = New Format
+                tmpFormat.Init xlBetween, Me.Value * 1.001, Me.Value * TmpTol, YellowFont, YellowInterior
+                Me.Formating.Add tmpFormat
+                Set tmpFormat = New Format
+                tmpFormat.Init xlLess, Me.Value * 1.001, "", GreenFont, GreenInterior
+                Me.Formating.Add tmpFormat
+                Set tmpFormat = New Format
+                tmpFormat.Init xlLess, 0, "", RedFont, RedInterior
+                Me.Formating.Add tmpFormat
+            Case ">="
+                'Using Me.Tolerance set the tolerated difference between the goal and given metric
+                TmpTol = 1 - (Me.Tolerance / 100)
+                tmpFormat.Init xlGreater, Me.Value * 1.001, "", GreenFont, GreenInterior
+                Me.Formating.Add tmpFormat
+                Set tmpFormat = New Format
+                tmpFormat.Init xlBetween, Me.Value, Me.Value * TmpTol, YellowFont, YellowInterior
+                Me.Formating.Add tmpFormat
+                Set tmpFormat = New Format
+                tmpFormat.Init xlLess, Me.Value * TmpTol, "", RedFont, RedInterior
+                Me.Formating.Add tmpFormat
+            Case "="
+                'Using Me.Tolerance set the tolerated difference between the goal and given metric
+                TmpTol = 1 - (Me.Tolerance / 100)
+                tmpFormat.Init xlGreater, Me.Value * 1.001, "", GreenFont, GreenInterior
+                Me.Formating.Add tmpFormat
+                Set tmpFormat = New Format
+                tmpFormat.Init xlBetween, Me.Value, Me.Value * TmpTol, YellowFont, YellowInterior
+                Me.Formating.Add tmpFormat
+                Set tmpFormat = New Format
+                tmpFormat.Init xlLess, Me.Value * TmpTol, "", RedFont, RedInterior
+                Me.Formating.Add tmpFormat
+        End Select
+    End If
+Success_SetFormats:
+    SetFormats = True
+Exit_SetFormats:
+    'Dump objects
+    Set tmpFormat = Nothing
+    Exit Function
+Err_SetFormats:
+    Resume Exit_SetFormats
+End Function
+
+Public Function FormatGoals(GoalsInRows As Boolean) As Boolean
+On Error GoTo Err_FormatGoals  ' Enable error-handling routine.
+'Format the give Goal object as defined by it's Formating collection
+    Dim F As Format
+    Dim rng As Range
+    'The following subtracts the goal header from the range so it does not get formatted
+    If GoalsInRows Then
+        'Move the range over one column, then subtract the last column from it
+        Set rng = Me.MetricRange.Offset(0, 1).Resize(1, Me.MetricRange.Columns.Count - 1)
+    Else
+        'Move the range down one row, then subtract the last row from it
+        Set rng = Me.MetricRange.Offset(1, 0).Resize(Me.MetricRange.Rows.Count - 1, 1)
+    End If
+    
+    Application.ScreenUpdating = False
+    
+    With rng
+        'Iterate throuch each Format in the Formating collection
+        For Each F In Me.Formating
+            'Add apply the formating, this is pretty straight forward
+            If F.Operator = xlBetween Then
+                .FormatConditions.Add Type:=xlCellValue, Operator:=F.Operator, _
+                Formula1:=F.Formula1, Formula2:=F.Formula2
+            Else
+                .FormatConditions.Add Type:=xlCellValue, Operator:=F.Operator, _
+                Formula1:=F.Formula1
+            End If
+            
+            .FormatConditions(.FormatConditions.Count).SetFirstPriority
+                
+            With .FormatConditions(1).Font
+                .Color = F.FontColor
+                .TintAndShade = 0
+            End With
+            
+            With .FormatConditions(1).Interior
+                .PatternColorIndex = xlAutomatic
+                .Color = F.InteriorColor
+                .TintAndShade = 0
+            End With
+            
+            .FormatConditions(1).StopIfTrue = False
+        Next
+    End With
+    
+    Application.ScreenUpdating = True
+Success_FormatGoals:
+    FormatGoals = True
+Exit_FormatGoals:
+    'Dump Objects
+    Set rng = Nothing
+    Exit Function
+Err_FormatGoals:
+    Resume Exit_FormatGoals
+End Function
