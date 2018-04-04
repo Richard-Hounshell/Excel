@@ -1,0 +1,20 @@
+Function DeleteWS(ws As Worksheet) As Boolean
+On Error GoTo Err_DeleteWS ' Enable error-handling routine.
+    Application.DisplayAlerts = False
+    
+    ws.Delete
+    
+    Application.DisplayAlerts = True
+    
+Success_DeleteWS:
+    DeleteWS = True
+Exit_DeleteWS:
+    Exit Function
+Err_DeleteWS:
+    Select Case Err.Number
+        Case Else
+            MsgBox "An error occured; report:" & Chr(10) & Err.Description & Chr(10) & Err.Number
+            Debug.Print "Worksheet did not exist."
+            Resume Exit_DeleteWS
+    End Select
+End Function
