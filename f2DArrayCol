@@ -1,0 +1,23 @@
+Function f2DArrayCol(varArray As Variant, indexY As Integer, Optional FirstElement As Integer = 0) As Variant
+On Error GoTo Err_f2DArrayCol ' Enable error-handling routine.
+
+    Dim outArray As Variant
+    Dim x As Integer
+        
+    ReDim outArray(UBound(varArray, 1))
+    
+    For x = FirstElement To (UBound(varArray, 1))
+        outArray(x) = varArray(x, indexY)
+    Next
+    
+    f2DArrayCol = outArray
+
+Exit_f2DArrayCol:
+    Exit Function
+Err_f2DArrayCol:
+    Select Case Err.Number
+        Case Else
+            MsgBox "An error occured; report:" & Chr(10) & Err.Description & Chr(10) & Err.Number
+            Resume Exit_f2DArrayCol
+    End Select
+End Function
