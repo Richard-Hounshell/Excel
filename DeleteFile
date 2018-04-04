@@ -1,0 +1,21 @@
+Function DeleteFile(ByVal FileToDelete As String) As Boolean
+On Error GoTo Err_DeleteFile ' Enable error-handling routine.
+
+   If FileExists(FileToDelete) Then 'See above
+      ' First remove read-only attribute, if set
+      SetAttr FileToDelete, vbNormal
+      ' Then delete the file
+      Kill FileToDelete
+   End If
+
+Success_DeleteFile:
+    DeleteFile = True
+Exit_DeleteFile:
+    Exit Function
+Err_DeleteFile:
+    Select Case Err.Number
+        Case Else
+            MsgBox "An error occured; report:" & Chr(10) & Err.Description & Chr(10) & Err.Number
+            Resume Exit_DeleteFile
+    End Select
+End Function
