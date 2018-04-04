@@ -1,0 +1,12 @@
+Function FileExists(ByVal FileToTest As String) As Boolean
+On Error GoTo Err_FileExists
+   FileExists = (Dir(FileToTest) <> "")
+Exit_FileExists:
+    Exit Function
+Err_FileExists:
+    Select Case Err.Number
+        Case Else
+            MsgBox "An error occured; report:" & Chr(10) & Err.Description & Chr(10) & Err.Number
+            Resume Exit_FileExists
+    End Select
+End Function
