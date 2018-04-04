@@ -1,0 +1,72 @@
+'Class Format
+'This class is used to store Range conditional formatting options best used in a collection
+Option Explicit
+Private clsOperator As XlFormatConditionOperator
+Private clsFormula1 As Variant
+Private clsFormula2 As Variant
+Private clsFontColor As FontColor
+Private clsInteriorColor As InteriorColor
+
+Public Enum FontColor
+    RedFont = -16383844
+    GreenFont = -16752384
+    YellowFont = -16751204
+End Enum
+
+Public Enum InteriorColor
+    RedInterior = 13551615
+    GreenInterior = 13561798
+    YellowInterior = 10284031
+End Enum
+
+Public Property Get Operator() As XlFormatConditionOperator
+    Operator = clsOperator
+End Property
+
+Public Property Let Operator(dValue As XlFormatConditionOperator)
+    clsOperator = dValue
+End Property
+
+Public Property Get Formula1() As Variant
+    Formula1 = clsFormula1
+End Property
+
+Public Property Let Formula1(dValue As Variant)
+    clsFormula1 = dValue
+End Property
+
+Public Property Get Formula2() As Variant
+    Formula2 = clsFormula2
+End Property
+
+Public Property Let Formula2(dValue As Variant)
+    clsFormula2 = dValue
+End Property
+
+Public Property Get FontColor() As FontColor
+    FontColor = clsFontColor
+End Property
+
+Public Property Let FontColor(dValue As FontColor)
+    clsFontColor = dValue
+End Property
+
+Public Property Get InteriorColor() As InteriorColor
+    InteriorColor = clsInteriorColor
+End Property
+
+Public Property Let InteriorColor(dValue As InteriorColor)
+    clsInteriorColor = dValue
+End Property
+
+Public Sub Init(tmpOp As XlFormatConditionOperator, _
+                tmpF1 As Variant, _
+                tmpF2 As Variant, _
+                tmpFC As FontColor, _
+                tmpBC As InteriorColor)
+    Me.Operator = tmpOp
+    Me.Formula1 = tmpF1
+    Me.Formula2 = tmpF2
+    Me.FontColor = tmpFC
+    Me.InteriorColor = tmpBC
+End Sub
