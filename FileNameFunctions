@@ -12,3 +12,7 @@ Err_FileNmNoExt:
             Resume Exit_FileNmNoExt
     End Select
 End Function
+
+Function FileExt(sFile As String) As String
+    FileExt = Right$(sFile, Len(sFile) - InStrRev(sFile, "."))
+End Function
