@@ -1,0 +1,884 @@
+'Class Report
+'This class extracts information from attached worksheets to format reports
+Option Explicit
+Private strRprtName As String
+Private intHeaderWidth As Integer
+Private strRprtTitle As String
+Private strRprtWSNm As String
+Private strTeamInfo As String
+Private strRprtType As String
+Private bolGoalsInRows As Boolean
+Private wsRprt As Worksheet
+Private rngRprtStart As Range
+Private rngHeader As Range
+Private collGoals As New Collection
+Private collRecep As New Collection
+Private rngOutput As Range
+
+Public Property Get OutputRange() As Range
+    Set OutputRange = rngOutput
+End Property
+
+Public Property Let OutputRange(rng As Range)
+    Set rngOutput = rng
+End Property
+
+Public Property Get ReportName() As String
+    ReportName = strRprtName
+End Property
+
+Public Property Let ReportName(dValue As String)
+    strRprtName = dValue
+End Property
+
+Public Property Get HeaderWidth() As Integer
+    HeaderWidth = intHeaderWidth
+End Property
+
+Public Property Let HeaderWidth(dValue As Integer)
+    intHeaderWidth = dValue
+End Property
+
+Public Property Get ReportType() As String
+    ReportType = strRprtType
+End Property
+
+Public Property Let ReportType(dValue As String)
+    strRprtType = dValue
+End Property
+
+Public Property Get StartRange() As Range
+    Set StartRange = rngRprtStart
+End Property
+
+Public Property Let StartRange(dValue As Range)
+    Set rngRprtStart = dValue
+End Property
+
+Public Property Get Title() As String
+    Title = strRprtTitle
+End Property
+
+Public Property Let Title(dValue As String)
+    strRprtTitle = dValue
+End Property
+
+Public Property Get TeamInfo() As String
+    TeamInfo = strTeamInfo
+End Property
+
+Public Property Let TeamInfo(dValue As String)
+    strTeamInfo = dValue
+End Property
+
+Public Property Get WorksheetName() As String
+    WorksheetName = strRprtWSNm
+End Property
+
+Public Property Let WorksheetName(dValue As String)
+    strRprtWSNm = dValue
+End Property
+
+Public Property Get Worksheet() As Worksheet
+    Set Worksheet = wsRprt
+End Property
+
+Public Property Let Worksheet(dValue As Worksheet)
+    Set wsRprt = dValue
+End Property
+
+Public Property Get GoalsInRows() As Boolean
+    GoalsInRows = bolGoalsInRows
+End Property
+
+Public Property Let GoalsInRows(dValue As Boolean)
+    bolGoalsInRows = dValue
+End Property
+
+Public Property Get HeaderRange() As Range
+    Set HeaderRange = rngHeader
+End Property
+
+Public Property Let HeaderRange(rng As Range)
+    Set rngHeader = rng
+End Property
+
+Public Property Get Goals() As Collection
+    Set Goals = collGoals
+End Property
+
+Public Property Let Goals(coll As Collection)
+    Set collGoals = coll
+End Property
+
+Public Property Get Recipients() As Collection
+    Set Recipients = collRecep
+End Property
+
+Public Property Let Recipients(coll As Collection)
+    Set collRecep = coll
+End Property
+
+Public Property Get EmailSubject() As String
+    EmailSubject = Me.TeamInfo & " " & Me.Title
+End Property
+
+Public Property Get ValidReport(ws As Worksheet) As Worksheet
+On Error Resume Next
+    If Not FindReport(ws) Is Nothing Then
+        Set ValidReport = ws
+    End If
+End Property
+
+Public Property Get HTMLBody() As String
+On Error Resume Next
+    HTMLBody = CreateHTMLBody
+End Property
+
+Public Property Get FullRange() As Range
+On Error Resume Next
+    'Create a union range of the Header and Goals
+    Dim G As Goal
+    Dim rng As Range
+    
+    Set rng = Me.HeaderRange
+    
+    For Each G In Me.Goals
+        Set rng = Union(rng, G.MetricRange)
+    Next
+    
+    Set FullRange = rng
+    Set rng = Nothing
+End Property
+
+Public Function Init(Optional ws As Worksheet) As Boolean
+On Error GoTo Err_Init  ' Enable error-handling routine.
+    Dim rng As Range
+    Dim Continue As Boolean: Continue = True
+    'If the ws is nothing but Me.Worksheet is set
+    If ws Is Nothing And Not Me.Worksheet Is Nothing Then
+        Set rng = FindReport(Me.Worksheet)
+    ElseIf Not ws Is Nothing Then
+        Set rng = FindReport(ws)
+    Else
+        Debug.Print "No worksheet passed and/or Me.Worksheet not previously set, which shouldn't happen."
+    End If
+    'Determine if a valid report was found..
+    If Not rng Is Nothing Then
+        'Valid report found set these values below
+        With rng
+            Me.ReportName = .Value
+            Me.ReportType = .Offset(0, 5)
+            Me.WorksheetName = .Offset(0, 4)
+            Me.Title = AddDateTitle(.Offset(0, 3))
+            Me.StartRange = Me.Worksheet.Range(ArrayToAddr(.Offset(0, 2)))
+            Me.HeaderWidth = .Offset(0, 1)
+        End With
+        'Contine is used to determine if the function succeeded
+        Continue = SetGoals
+        'Did SetGoals succeed..
+        If Continue Then
+            'Attempt to SetRecipients
+            Continue = SetRecipients
+            'Did SetRecipients succeed...
+            If Continue Then
+                'Attempt to SetOutput
+                Continue = SetOutput
+                'Did SetOutput succeed...
+                If Continue Then
+                    'Attempt to SetBorders
+                    Continue = SetBorders
+                    'Did SetBorders succeed...
+                    If Continue Then
+                        'Attempt to CreateEmail
+                        Continue = CreateEmail
+                        'Did CreateEmail succeed...
+                        If Continue Then
+                            CreateButton "Format Report", _
+                                        "CreateMetricsReport", _
+                                        "btn_FormatMetrics", _
+                                        Me.Worksheet
+                        End If
+                    End If
+                End If
+            End If
+        End If
+        Init = Continue
+        'Delete the Output worksheet as it is no longer needed
+        DeleteWS Me.OutputRange.Parent
+        'Dump objects
+        Set rng = Nothing
+        Application.ScreenUpdating = True
+        Exit Function 'We're done here skip that last block
+    End If
+
+Not_Found:
+    MsgBox "This document will not work with this macro.", , "Wrong Report"
+Exit_Init:
+    Exit Function
+Err_Init:
+    Init = False
+    Resume Next
+End Function
+
+Private Function FindReport(ws As Worksheet) As Range
+On Error GoTo Err_FindReport  ' Enable error-handling routine.
+    Dim wsMacro As Worksheet: Set wsMacro = Application.ThisWorkbook.Worksheets("Reports")
+    Dim rng As Range, rngSrch As Range
+    
+    With wsMacro
+        'Iterate through each report listed on the Reports sheet...
+        For Each rng In .Range(.Cells(2, 1), .Cells(fLast(LastRow, .UsedRange), 1))
+            'And search the given worksheet for a match
+            Set rngSrch = FindString(rng, ws)
+            'If a match is found...
+            If Not rngSrch Is Nothing Or InStr(1, ws.Parent.Name, rng) > 0 Then
+                'Set Me.Worksheet to it and...
+                If Me.Worksheet Is Nothing Then Me.Worksheet = ws
+                'Return the range of the report on "Reports" sheet
+                Set FindReport = rng
+                'Report was found, stop looking
+                Exit For
+            End If
+        Next
+    End With
+    
+Exit_FindReport:
+    'Dump objects
+    Set rng = Nothing
+    Set rngSrch = Nothing
+    Set wsMacro = Nothing
+    Exit Function
+Err_FindReport:
+    Resume Next
+End Function
+
+Private Function SetGoals() As Boolean
+On Error GoTo Err_SetGoals  ' Enable error-handling routine.
+    Dim rngSrchRprtGrp As Range, _
+        rngSrchRprtMet As Range, _
+        RprtGrp As Range, _
+        rngGoal As Range
+    Dim tmpGoal As Goal
+    Dim wsMacro As Worksheet
+    Dim LookAt As XlLookAt
+    Set wsMacro = Application.ThisWorkbook.Worksheets("Metrics Goals")
+
+    With wsMacro
+        'If report type is Palette we need to look for a match with the detials of a cell otherwise not
+        LookAt = IIf(Me.ReportType = "Palette", xlPart, xlWhole)
+        'Iterate through each report group..
+        For Each RprtGrp In .Range(.Cells(2, 6), .Cells(2, fLast(LastColumn, .UsedRange)))
+            'And search Me.Worksheet for a match...
+            Set rngSrchRprtGrp = FindString(RprtGrp, Me.Worksheet, LookAt)
+            'If a match is found between the report groups and Me.Worksheet...
+            If Not rngSrchRprtGrp Is Nothing Then
+                'Iterate through each goal on Metrics Goals sheet...
+                For Each rngGoal In .Range(.Cells(3, 1), .Cells(fLast(LastRow, .UsedRange), 1))
+                    'And search Me.Worksheet for them
+                    Set rngSrchRprtMet = FindString(rngGoal, Me.Worksheet, xlWhole)
+                    'If a match is found and it is not an empty goal...
+                    If Not rngSrchRprtMet Is Nothing Then
+                        If .Cells(rngGoal.Row, RprtGrp.Column) <> "" Then
+                            Set tmpGoal = New Goal
+                            'Create a Goal object and define it
+                            tmpGoal.Init rngGoal, rngSrchRprtMet, RprtGrp.Column
+                            'Add the goal object to the collection
+                            Me.Goals.Add tmpGoal
+                        End If
+                    End If
+                Next
+                'Determine if the goal labels are in rows as opposed to columns which is more typical
+                    'eventually this will be transposed via PasteSpecial
+                Me.GoalsInRows = IIf(Me.StartRange.Column <> _
+                                    Me.Goals(Me.Goals.Count).MetricRange.Column, False, True)
+                'Set the range of the header to last appropriate cell
+                Me.HeaderRange = SetRange(Me.StartRange, Me.HeaderWidth - 1) 'HeaderWidth minus 1 is an offset
+                'Iterate through each goal in the collection...
+                For Each tmpGoal In Me.Goals
+                    'And expand it to the last applicable cell
+                    tmpGoal.MetricRange = SetRange(tmpGoal.MetricRange)
+                    'Apply formating to the range
+                    tmpGoal.FormatGoals Me.GoalsInRows
+                Next
+                'Dump objects
+                Set tmpGoal = Nothing
+                Set rngSrchRprtMet = Nothing
+                Set rngGoal = Nothing
+                'The correct report group was found and set, no need to keep iterating
+                SetGoals = True
+                Exit For
+            End If
+        Next
+        'Check if report group was found and if not...
+        If rngSrchRprtGrp Is Nothing Or Me.Goals.Count = 0 Then
+            'Let the user know and ask if they want to add one now...
+            If MsgBox("Report group info or goals not yet added; add it now?", vbYesNo, "Missing Report Group") = vbYes Then
+                'If so, make it visible
+                Windows(Application.ThisWorkbook.Name).Visible = True
+                'Switch to the correct sheet
+                wsMacro.Activate
+                'Go to the next available cell
+                wsMacro.Cells(2, (fLast(LastColumn, wsMacro.UsedRange) + 1)).Select
+            End If
+        End If
+    End With
+    
+Exit_SetGoals:
+    'Dump objects
+    Set rngSrchRprtGrp = Nothing
+    Set RprtGrp = Nothing
+    Set wsMacro = Nothing
+    Exit Function
+Err_SetGoals:
+    Resume Exit_SetGoals
+End Function
+
+Private Function SetRange(rng As Range, Optional Offset As Long = 0) As Range
+On Error GoTo Err_SetRange  ' Enable error-handling routine.
+    'Expand each range given to the last column or row as applicable
+    'If the report header is wider than 1, an offset is applied
+    With Me.Worksheet
+        If Me.GoalsInRows Then
+            Set SetRange = .Range(rng.Cells, .Cells(rng.Row + Offset, fLast(LastColumn, .UsedRange)))
+        Else
+            Set SetRange = .Range(rng.Cells, .Cells(fLast(LastRow, .UsedRange), rng.Column + Offset))
+        End If
+    End With
+Exit_SetRange:
+    Exit Function
+Err_SetRange:
+    Resume Exit_SetRange
+End Function
+
+Private Function SetRecipients() As Boolean
+On Error GoTo Err_SetRecipients  ' Enable error-handling routine.
+    Dim rngSrch As Range, rng As Range
+    Dim CC As String
+
+    Dim wsMacro As Worksheet: Set wsMacro = Application.ThisWorkbook.Worksheets("Metrics Email Distro")
+    'Find the UM name from the report which is in the column next to "Supervisor:"
+    Select Case Me.ReportType
+        Case Is = "Metrics"
+            Set rngSrch = FindRecpMetrics(wsMacro)
+        Case Is = "Palette"
+            Set rngSrch = FindRecpPalette(wsMacro)
+        Case Is = "Complaints"
+            Set rngSrch = FindRecpComplaints(wsMacro)
+    End Select
+    'Check if the UM name on the report was found
+    If Not rngSrch Is Nothing Then
+        With wsMacro
+            'Add team distro email to recipients collection as "TO"
+            Me.Recipients.Add CStr(rngSrch.Offset(0, -1)), "TO"
+            'Iterate through each email address after the distro and add to the CC colection
+            For Each rng In .Range(rngSrch, fLast(LastCell, rngSrch.EntireRow))
+                'if rng does not contain the user's name and is not blank...
+                If InStr(1, rng, fUserDetails.UserName) = 0 And rng <> "" Then
+                    'Add this recepient to CC string
+                    CC = CC & rng & ";"
+                End If
+            Next
+            'Add the CC string to Me.Recipients
+            Me.Recipients.Add CC, "CC"
+            'Extract the team info from the distro for this team
+            Me.TeamInfo = "Team " _
+                & Mid(Me.Recipients("TO"), 8, InStr(1, Me.Recipients("TO"), " <") - 8)
+            'Dump ojects
+            Set rngSrch = Nothing
+            Set rng = Nothing
+            Set wsMacro = Nothing
+            SetRecipients = True
+            Exit Function 'UM details found short circuit and exit
+        End With
+    End If
+
+Not_Found:
+    If MsgBox("Team info not yet added; add it now?", vbYesNo, "Missing Team Info") = vbYes Then
+        'If so, make it visible
+        Windows(Application.ThisWorkbook.Name).Visible = True
+        'Switch to the correct sheet
+        wsMacro.Activate
+        'Go to the next available cell
+        wsMacro.Cells((fLast(LastRow, wsMacro.UsedRange) + 1), 1).Select
+    End If
+Exit_SetRecipients:
+    Exit Function
+Err_SetRecipients:
+    Select Case Err.Number
+        Case Is = 5
+            Resume Next
+        Case Else
+            MsgBox "An error occured; report:" & Chr(10) & Err.Description & Chr(10) & Err.Number
+            Resume Exit_SetRecipients
+    End Select
+End Function
+
+Private Function FindRecpMetrics(wsMacro As Worksheet) As Range
+    Dim rngSrch As Range, _
+        rng As Range
+    Dim rprtUM As String, _
+        UM As String, CC As String
+    Dim Attempts As Integer
+    'Find the UM name from the report which is in the column next to "Supervisor:"
+    Set rngSrch = FindString("Supervisor:", Me.Worksheet).Offset(0, 1)
+    'Check if the UM name on the report was found
+    If Not rngSrch Is Nothing Then
+        'Store the UM name from the report
+        rprtUM = rngSrch
+        With wsMacro
+            'Make 4 different attempts to find the UM details
+            For Attempts = 1 To 4
+                Select Case Attempts
+                    Case Is = 1 'Compare first and last name from report with distro list
+                        UM = rprtUM
+                        'Trim middle initial
+                        UM = Left(UM, Len(UM) - InStr((InStr(1, UM, " ") + 1), UM, " "))
+                        Set FindRecpMetrics = FindString(UM, wsMacro)
+                    Case Is = 2 'Compare last and first name from distro with that on the report
+                        For Each rng In .Range(.Cells(2, 2), .Cells(fLast(LastRow, .UsedRange), 2))
+                        'Iterate through each UM email, in column 2
+                            UM = rng
+                            'Trim middle initial
+                            UM = Left(UM, InStr((InStr(1, UM, " ") + 1), UM, " ") - 1)
+                            If InStr(1, rprtUM, UM) > 0 Then
+                                Set FindRecpMetrics = rng 'FindString(UM, wsMacro)
+                                Exit For
+                            End If
+                        Next
+                    Case Is = 3 'Compare last name first intital from report with distro list
+                        UM = rprtUM
+                        'Trim to last name first initial
+                        UM = Left(UM, Len(UM) - InStr(UM, ", ") + 2)
+                        Set FindRecpMetrics = FindString(UM, wsMacro)
+                    Case Is = 4 'Compare last name first intital from distro with that on the report
+                        For Each rng In .Range(.Cells(2, 2), .Cells(fLast(LastRow, .UsedRange), 2))
+                        'Iterate through each UM email, in column 2
+                            UM = rng
+                            'Trim to last name first initial
+                            UM = Left(UM, Len(UM) - InStr(UM, ", ") + 2)
+                            'Check if distro UM is on report
+                            If InStr(1, rprtUM, UM) > 0 Then
+                                Set FindRecpMetrics = rng 'FindString(UM, wsMacro)
+                                Exit For
+                            End If
+                        Next
+                End Select
+            Next
+        End With
+    Else
+        Debug.Print "Report doesn't contain the fields to start the search, this shouldn't happen"
+    End If
+End Function
+
+Private Function FindRecpPalette(wsMacro As Worksheet) As Range
+On Error GoTo Err_FindRecpPalette
+    Dim rngSrch As Range, rng As Range
+    Dim TeamNum As String
+    'Find the range containing the Team Info and move down one row
+    Set rngSrch = FindString("Team", Me.Worksheet).Offset(1, 0)
+    'Extract just the team number
+    TeamNum = Right(rngSrch, 3)
+    With wsMacro
+        'Iterate through each Team Distro and...
+        For Each rng In .Range(.Cells(2, 1), .Cells(fLast(LastRow, .UsedRange), 1))
+            'looking for one with TeamNum in it and...
+            If InStr(1, rng, TeamNum) > 0 Then
+                'Return that range offest one column to the left because that's what the other thing returns and this is easier
+                Set FindRecpPalette = rng.Offset(0, 1)
+                'Done searching
+                Exit For
+            End If
+        Next
+    End With
+Exit_FindRecpPalette:
+    'Dump objects
+    Set rngSrch = Nothing
+    Exit Function
+Err_FindRecpPalette:
+    Resume Exit_FindRecpPalette
+End Function
+
+Private Function FindRecpComplaints(wsMacro As Worksheet) As Range
+On Error GoTo Err_FindRecpComplaints
+    Dim rngSrch As Range, rng As Range
+    Dim TeamNum As String
+    'Loop through this code since a user free form input is required
+    Do While TeamNum = ""
+        'Ask the user for the Team number
+        TeamNum = InputBox("Please input the team number you wish to review (Format: AAA000)", "Team Number")
+        'Search the report to see if the team number given is present
+        Set rngSrch = FindString(TeamNum, Me.Worksheet)
+        'Check if that team was found and...
+        If Not rngSrch Is Nothing Then
+            'If so, filter out all results not for this team
+            Me.Worksheet.UsedRange.AutoFilter Field:=rngSrch.Column, Criteria1:=rngSrch, VisibleDropDown:=False
+            With wsMacro
+                'Iterate through each Team Distro and...
+                For Each rng In .Range(.Cells(2, 1), .Cells(fLast(LastRow, .UsedRange), 1))
+                    'looking for one with TeamNum truncated to just the number in it and...
+                    If InStr(1, rng, Right(TeamNum, 3)) > 0 Then
+                        'Return that range offest one column to the left because that's what the other thing returns and this is easier
+                        Set FindRecpComplaints = rng.Offset(0, 1)
+                        'Done searching
+                        Exit For
+                    End If
+                Next
+            End With
+        Else
+            'Otherwise let the user know it wasn't found and give them an option to retry
+            If MsgBox("Team number not found on report; enter again and retry?", vbRetryCancel, "Not Found") = vbRetry Then
+                TeamNum = "" 'This will trigger the do while to loop again
+            Else: TeamNum = "x" 'This will exit the do while loop
+            End If
+        End If
+    Loop
+
+Exit_FindRecpComplaints:
+    'Dump objects
+    Set rngSrch = Nothing
+    Exit Function
+Err_FindRecpComplaints:
+    Resume Exit_FindRecpComplaints
+End Function
+
+Private Function SetOutput() As Boolean
+On Error GoTo Err_SetOutput  ' Enable error-handling routine.
+'Creates a sanitized and contiguous version of the report
+    Dim ws As Worksheet
+    Dim wsName As String: wsName = "Report Output"
+    
+    Application.ScreenUpdating = False
+    Application.DisplayAlerts = False
+    'Check if the report type is Palette and...
+    If Me.ReportType <> "Metrics" Then
+        'If so apply special handing, if that fails exit the function
+        If Not SpecialHandling Then Exit Function
+    End If
+    
+    With Me.Worksheet.Parent
+        On Error Resume Next
+        'Attempt to delete existing version of "Report Output", move on if it doesn't exist and...
+        DeleteWS Me.Worksheet.Parent.Sheets(wsName)
+        'Add a worksheet named "Report Output"
+        .Sheets.Add(After:=.Sheets(.Sheets.Count)).Name = wsName
+        Set ws = .Worksheets(wsName)
+    End With
+    'Copy the union of the goal ranges and header
+    Me.FullRange.Copy
+    'Paste the resultant union into the new worksheet and transpose if it matches the GoalsInRows criteria
+    ws.UsedRange.PasteSpecial Paste:=xlPasteAll, Operation:=xlNone, SkipBlanks:=False, Transpose:=Me.GoalsInRows
+    'Set output to the result
+    Me.OutputRange = ws.UsedRange
+    'Check if the report type is Metrics and...
+    If Me.ReportType = "Metrics" Then
+        'If so apply special handing, if that fails exit the function
+        If Not SpecialHandling Then Exit Function
+    End If
+    
+    Application.DisplayAlerts = True
+    Application.ScreenUpdating = True
+    
+Success_SetOutput:
+    SetOutput = True
+Exit_SetOutput:
+    'Dump objects
+    Set ws = Nothing
+    Exit Function
+Err_SetOutput:
+    Resume Exit_SetOutput
+End Function
+
+Private Function AddDateTitle(tmpTtl As String) As String
+On Error GoTo Err_AddDateTitle  ' Enable error-handling routine.
+    Dim rngSrch As Range, dt As Date, strComparison As String, strDate As String
+    'Add date details from the report to the report title
+    With Me.Worksheet
+        'Check report time
+        Select Case Me.ReportType
+            'Is a metrics report
+            Case Is = "Metrics"
+                'Find timeframe of reporting from the cell "Selected "
+                Set rngSrch = FindString("Date Type:", Me.Worksheet)
+                'Date comparison is set to the found in the next column
+                strComparison = rngSrch.Offset(0, 1)
+                'The date string is set from the 3rd column
+                strDate = rngSrch.Offset(0, 3)
+                'Change the date string to a Date type
+                dt = DateValue(IIf(InStr(1, strDate, "to") > 0, _
+                                Left(strDate, 10), strDate))
+            Case Is = "Palette"
+                'Find timeframe of reporting from field
+                Set rngSrch = FindString("Report Period ", Me.Worksheet)
+                'Construct string comparision from that field
+                strComparison = Mid(rngSrch, (InStr(1, rngSrch, "(") + 1), _
+                                    (InStr(1, rngSrch, ")") - InStr(1, rngSrch, "(")) - 1)
+                'Extract date as string
+                strDate = Trim(Mid(rngSrch, InStr(1, rngSrch, ")") + 1))
+                'Change the date string to a Date type
+                dt = DateValue(Mid(strDate, 1, InStr(1, strDate, " ") - 1))
+            Case Is = "Complaints"
+                strComparison = "Month"
+                dt = DateValue(Me.Worksheet.Cells(2, 1))
+        End Select
+        
+        'Check if the date info was found...
+        If strComparison <> "" Then
+            'And begin a comparison of what type of date range is listed
+            Select Case strComparison
+                'If this is a month report...
+                Case "Month"
+                    'Compare to see if it it is...
+                    Select Case DateDiff("m", dt, Date)
+                         'The current month
+                        Case Is = 0
+                            AddDateTitle = "Current MTD " & tmpTtl
+                        'The previous month
+                        Case Is = 1
+                            AddDateTitle = "Previous MTD " & tmpTtl
+                        'Some other month
+                        Case Else
+                             AddDateTitle = "Month of " & dt & " " & tmpTtl
+                    End Select
+                'If this is a specific week's report
+                Case "Week"
+                    'Compare to see if it it is...
+                    Select Case DateDiff("w", dt, Date)
+                        'The current week
+                        Case Is = 0
+                            AddDateTitle = "Current WTD " & tmpTtl
+                        'The previous week
+                        Case Is = 1
+                            AddDateTitle = "Previous Week " & tmpTtl
+                        'Or some other week
+                        Case Else
+                            AddDateTitle = "Week of " & dt & " " & tmpTtl
+                    End Select
+                'If this is a specific day's report
+                Case "Day"
+                    AddDateTitle = "Day of " & dt & " " & tmpTtl
+            End Select
+        End If
+    End With
+    
+Exit_fDateSubj:
+    'Dump objects
+    Set rngSrch = Nothing
+    Exit Function
+Err_AddDateTitle:
+    AddDateTitle = ""
+    Resume Exit_fDateSubj
+End Function
+
+Private Function SetBorders() As Boolean
+On Error GoTo Err_SetBorders  ' Enable error-handling routine.
+'Set the borders of the OutputRange and autofit them
+    Application.ScreenUpdating = False
+    
+    If Not Me.OutputRange Is Nothing Then
+        With Me.OutputRange
+            With .Interior
+                .Pattern = xlNone
+                .TintAndShade = 0
+                .PatternTintAndShade = 0
+            End With
+            
+            With .Borders
+                .LineStyle = xlContinuous
+                .ColorIndex = 0
+                .TintAndShade = 0
+                .Weight = xlHairline
+            End With
+            .Columns.AutoFit
+            .Rows.AutoFit
+        End With
+    End If
+    
+    Application.ScreenUpdating = True
+Success_SetBorders:
+    SetBorders = True
+Exit_SetBorders:
+    Exit Function
+Err_SetBorders:
+    Resume Exit_SetBorders
+End Function
+
+Public Function CreateEmail() As Boolean
+On Error GoTo Err_CreateEmail
+    'Create the final email
+    CreateEmail = EmailRange(Me.EmailSubject, Me.HTMLBody, Me.OutputRange, Me.Recipients("TO"), Me.Recipients("CC"))
+Exit_CreateEmail:
+    Exit Function
+Err_CreateEmail:
+    Resume Next
+End Function
+
+Private Function CreateHTMLBody() As String
+On Error GoTo Err_CreateHTMLBody  ' Enable error-handling routine.
+    'Compose the body of the email in HTML
+    Dim str As String
+    Dim G As Goal
+    
+    'Add the report title to the body
+    str = HeaderHTML(Me.Title)
+    'Add the "Reminder of goals" to the body
+    str = str & FontHTML & "><strong><u>Reminder of Goals:</u></strong></span>" & Chr(10)
+    'Iterate through each goal in Goals collection...
+    For Each G In Me.Goals
+        'And add each Goal's HTML to the body
+        str = str & G.HTML
+    Next G
+    'Add "Goal Legend" to body
+    str = str & GoalLegendHTML
+    'Return the string
+Success_CreateHTMLBody:
+    CreateHTMLBody = str
+Exit_CreateHTMLBody:
+    Exit Function
+Err_CreateHTMLBody:
+    Resume Next
+End Function
+
+Private Function SpecialHandling() As Boolean
+On Error GoTo Err_SpecialHandling  ' Enable error-handling routine.
+    Dim rng As Range
+    Dim G As Goal
+    
+    Select Case Me.ReportType
+        Case Is = "Metrics"
+            'Special handling for "Availablity" report
+            If InStr(1, Me.ReportName, "Availability for") > 0 Then
+                With Me.OutputRange
+                    .Replace What:="Hrs", Replacement:="Hours", LookAt:=xlWhole, _
+                    SearchOrder:=xlByRows, MatchCase:=False, SearchFormat:=False, _
+                    ReplaceFormat:=False
+                    
+                    .Replace What:=" Division", Replacement:="TEAM OVERALL", LookAt:=xlWhole, _
+                    SearchOrder:=xlByRows, MatchCase:=False, SearchFormat:=False, _
+                    ReplaceFormat:=False
+                    'Delete the conditional formating on the rows containing Hours
+                    For Each rng In .Cells
+                        If rng.Value = "Hours" Then
+                            .Range(.Cells(rng.Row, 2), .Cells(rng.Row, fLast(LastColumn, Me.OutputRange))).FormatConditions.Delete
+                        End If
+                    Next
+                End With
+            End If
+        Case Is = "Palette"
+            'Special handling for Palette and Complaints report
+            Dim collDelRng As New Collection
+            'If so, the header range is merged, undo that
+            Me.HeaderRange.UnMerge
+            'The header range font is white, change that to black
+            Me.HeaderRange.EntireRow.Font.Color = 0
+            'Iterate through each cell in the header range and...
+            For Each rng In Me.HeaderRange.Resize(Me.HeaderRange.Rows.Count - 1)
+                'Check if it's blank and...
+                If rng = "" Then
+                    'If so, add that range to a collection of ranges, which will be deleted
+                    collDelRng.Add rng
+                Else
+                    'If not delete any hyperlinks
+                    rng.Hyperlinks.Delete
+                End If
+            Next
+            'Iterate through collection of ranges and delete them
+            For Each rng In collDelRng
+                rng.EntireRow.Delete
+            Next
+            'Add the word "Total" to the last header cell and align it
+            With fLast(LastCell, Me.HeaderRange)
+                If .Value <> "Total" Then
+                    .Offset(1, 0).Value = "Total"
+                    .Offset(1, 0).HorizontalAlignment = xlLeft
+                    .Offset(1, 0).Font.Bold = True
+                End If
+            End With
+
+            'Iterate through each goal and...
+            For Each G In Me.Goals
+                'Check if metric is a percent format and...
+                If InStr(1, G.MetricType, "%") > 0 Then
+                    'Excluding the Goal header...
+                    With G.MetricRange.Offset(1, 0).Resize(G.MetricRange.Rows.Count - 1)
+                        'Replace the "%" and...
+                        If .Replace("%", "") Then
+                            'Iterate through each cell within the range and...
+                            For Each rng In .Cells
+                                On Error Resume Next
+                                'Divide it by 100 to make it compatible with Percent format
+                                rng.Value = rng.Value / 100
+                            Next
+                        End If
+                        'Set the range to the Percent format
+                        .NumberFormat = "0.00%"
+                    End With
+                End If
+            Next
+        Case Is = "Complaints"
+            For Each G In Me.Goals
+                'Check if metric is a percent format and...
+                If InStr(1, G.MetricType, "%") > 0 Then
+                    'Excluding the Goal header and set the range to the Percent format
+                    G.MetricRange.Offset(1, 0).Resize(G.MetricRange.Rows.Count - 1).NumberFormat = "0.00%"
+                    'G.MetricRange
+                End If
+            Next
+            'Sort the document by the header
+            Me.Worksheet.AutoFilter.Sort.SortFields.Add _
+                    Key:=Me.HeaderRange, SortOn:=xlSortOnValues, Order:=xlAscending, _
+                    DataOption:=xlSortNormal
+            With Me.Worksheet.AutoFilter.Sort
+                .Header = xlYes
+                .MatchCase = False
+                .Orientation = xlTopToBottom
+                .SortMethod = xlPinYin
+                .Apply
+            End With
+    End Select
+    
+Success_SpecialHandling:
+    SpecialHandling = True
+Exit_SpecialHandling:
+    Exit Function
+Err_SpecialHandling:
+    Resume Exit_SpecialHandling
+End Function
+
+Private Function GoalLegendHTML() As String
+    'Create the HTML for the "Goal Legend"
+    Dim str As String
+  
+    str = NewLineHTML
+        str = str & FontHTML & "><strong><em><u>*Legend</u></em></strong></span>" & Chr(10)
+    str = str & NewLineHTML
+    str = str & "<p><span style=" & Chr(34) & "color:#008000" & Chr(34) & "><span style=" & Chr(34) & "font-family:Arial,Helvetica,sans-serif" & Chr(34) & "><strong><span style=" & Chr(34) & _
+        "background-color:#98fb98" & Chr(34) & ">Green: Meeting OR exceeding goal</span></strong></span></span>" & Chr(10)
+    str = str & "</p>"
+    str = str & "<p><span style=" & Chr(34) & "color:#ffd700" & Chr(34) & "><span style=" & Chr(34) & "font-family:Arial,Helvetica,sans-serif" & Chr(34) & "><strong><span style=" & Chr(34) & _
+        "background-color:#fafad2" & Chr(34) & ">Yellow: Approaching goal!</span></strong></span></span>" & Chr(10)
+    str = str & NewLineHTML
+    str = str & "<p><span style=" & Chr(34) & "color:#b22222" & Chr(34) & "><span style=" & Chr(34) & "font-family:Arial,Helvetica,sans-serif" & Chr(34) & "><strong><span style=" & Chr(34) & _
+        "background-color:#f08080" & Chr(34) & ">Red: Opportunity for improvement</span></strong></span></span>" & Chr(10)
+    str = str & "</p>" & Chr(10) & NewLineHTML
+
+    GoalLegendHTML = str
+
+End Function
+
+Private Function HeaderHTML(Text As String) As String
+    HeaderHTML = "<p><span style=" & FontHTML & "><a name=" & Chr(34) & "_MailOriginal" & Chr(34) & _
+        "><strong><u><span style=" & Chr(34) & "font-size:20.0pt" & Chr(34) & ">" & Text & "</span></u></strong></a></span>" & Chr(10)
+End Function
+
+Private Sub Class_Initialize()
+    'do nothing
+End Sub
+
+Private Sub Class_Terminate()
+    Set wsRprt = Nothing
+    Set rngRprtStart = Nothing
+    Set rngHeader = Nothing
+    Set collRecep = Nothing
+    Set collGoals = Nothing
+End Sub
