@@ -1,0 +1,19 @@
+Function VisibleWB(Optional Visible As Boolean = False, Optional wb As Workbook) As Boolean
+On Error GoTo Err_VisibleWB  ' Enable error-handling routine.
+
+    If wb Is Nothing Then
+        Set wb = Application.ActiveWorkbook
+    End If
+    
+    Windows(wb.Name).Visible = Visible
+Success_VisibleWB:
+    VisibleWB = True
+Exit_VisibleWB:
+    Exit Function
+Err_VisibleWB:
+    Select Case Err.Number
+        Case Else
+            MsgBox "An error occured; report:" & Chr(10) & Err.Description & Chr(10) & Err.Number
+            Resume Exit_VisibleWB
+    End Select
+End Function
