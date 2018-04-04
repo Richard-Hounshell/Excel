@@ -1,0 +1,29 @@
+Function SaveWB(wb As Workbook, _
+                sPath As String, _
+                Optional ovrWrt As Boolean = False) As Boolean
+On Error GoTo Err_SaveWB ' Enable error-handling routine.
+    
+    Dim sFileName As String: sFileName = sPath & "\" & Replace(wb.Name, ".Backup", "")
+    
+    If Not FileExists(sFileName) Or ovrWrt Then
+        Application.DisplayAlerts = False 'IT WORKS TO DISABLE ALERT PROMPT
+        
+        'SAVES FILE USING THE VARIABLE sFileName AS FILENAME
+        wb.SaveAs Filename:=sFileName, FileFormat:=wb.FileFormat, _
+        Password:="", WriteResPassword:="", ReadOnlyRecommended:=False, _
+        CreateBackup:=False, AccessMode:=xlExclusive, _
+        ConflictResolution:=Excel.XlSaveConflictResolution.xlLocalSessionChanges
+        
+        Application.DisplayAlerts = True 'RESETS DISPLAY ALERTS
+    End If
+Success_SaveWB:
+    SaveWB = True
+Exit_SaveWB:
+    Exit Function
+Err_SaveWB:
+    Select Case Err.Number
+        Case Else
+            MsgBox "An error occured; report:" & Chr(10) & Err.Description & Chr(10) & Err.Number
+            Resume Exit_SaveWB
+    End Select
+End Function
